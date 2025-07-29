@@ -13,7 +13,7 @@ SQL_CONN = os.getenv("AIRFLOW__DATABASE__SQL_ALCHEMY_CONN")
 
 FILE_PATH = "data/source/Deliveries.csv"
 TABLE_NAME= "deliveries_raw"
-SCHEMA_NAME ="raw_data"
+RAW_SCHEMA ="raw_data"
 
 def create_conn():
     try:
@@ -26,9 +26,19 @@ def create_conn():
 
 def db_schema(engine):
     with engine.connect() as conn :
-        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_NAME};"))
-        logging.info(f"Schema'{SCHEMA_NAME}' checked/created")
-        
+        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {RAW_SCHEMA};"))
+        logging.info(f"Schema'{RAW_SCHEMA}' checked/created")
+
+def extract_raw_from_db(engine):
+    try:
+        with engine.connect() as conn:
+            df = pd.read_sql(text(f"SELECT * FROM {RAW_SCHEMA}.{TABLE_NAME}"), conn)
+            logging.info(f"Raw data extracted from {RAW_SCHEMA}.{TABLE_NAME} - {len(df)} records")
+            return df
+    except Exception as e:
+        logging.error(f"Failed to extract raw data: {e}")
+        raise e
+
 def load_csv_to_db(engine):
     try:
         df = pd.read_csv(FILE_PATH)
@@ -36,21 +46,11 @@ def load_csv_to_db(engine):
         
         df.to_sql(name = TABLE_NAME , 
                   con=engine , 
-                  schema = SCHEMA_NAME,
+                  schema = RAW_SCHEMA,
                   if_exists="replace",
                   index=False
                   )
-        logging.info(f"Data loaded into {SCHEMA_NAME}.{TABLE_NAME} successfully")
+        logging.info(f"Data loaded into {RAW_SCHEMA}.{TABLE_NAME} successfully")
     except Exception as e:
         logging.error("CSV load failed")
         raise e
-
-def main():
-    logging.info("EXTRACTING ...")
-    engine = create_conn()
-    db_schema(engine)
-    load_csv_to_db(engine)
-    logging.info("EXTRACTION FINISHED")
-    
-if __name__ == "__main__":
-    main()

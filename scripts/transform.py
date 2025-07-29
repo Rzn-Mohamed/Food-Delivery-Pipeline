@@ -8,30 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()
 logging.basicConfig(level=logging.INFO , format="%(asctime)s - %(levelname)s - %(message)s")
 
-SQL_CONN = os.getenv("AIRFLOW__DATABASE__SQL_ALCHEMY_CONN")
-TABLE_NAME= "deliveries_raw"
-SCHEMA_NAME ="raw_data"
-
-def create_conn():
-    try:
-        engine = create_engine(SQL_CONN)
-        logging.info("Connected to DB")
-        return engine
-    except Exception as e :
-        logging.error("Connection Failed")
-        raise e
-
-def extract_raw_from_db(engine):
-    try:
-        with engine.connect() as conn:
-            df = pd.read_sql(text(f"SELECT * FROM {SCHEMA_NAME}.{TABLE_NAME}"), conn)
-            logging.info(f"Raw data extracted from {SCHEMA_NAME}.{TABLE_NAME} - {len(df)} records")
-            return df
-    except Exception as e:
-        logging.error(f"Failed to extract raw data: {e}")
-        raise e
-
-
 def cleaning(df):
     logging.info("Starting data cleaning process...")
     
@@ -123,12 +99,13 @@ def create_star_schema_tables(engine):
         'dim_datetime' :""" 
             CREATE TABLE IF NOT EXISTS star_schema.dim_datetime(
                 datetime_key SERIAL PRIMARY KEY,
-                order_date DATE UNIQUE NOT NULL,
+                order_date DATE NOT NULL,
                 time_ordered TIME,
                 time_picked TIME,
                 day INTEGER,
                 month INTEGER,
-                year INTEGER
+                year INTEGER,
+                UNIQUE(order_date, time_ordered, time_picked)
             );
         """,
         
@@ -166,36 +143,4 @@ def create_star_schema_tables(engine):
             logging.info("tables created/checked") 
     except Exception as e:
         logging.error(f"failed to create tables")
-        raise e  
-    
-def main():
-    logging.info("STARTING TRANSFORMATION PROCESS...")
-    
-    try:
-        
-        engine = create_conn()
-        
-        logging.info("Step 1: Extracting raw data...")
-        df = extract_raw_from_db(engine)
-       
-        logging.info("Step 2: Cleaning and transforming data...")
-        cleaned_df = cleaning(df)
-        
-        logging.info("Step 3: Creating star schema...")
-        create_star_schema(engine)
-        
-        logging.info("Step 4: Creating star schema tables...")
-        create_star_schema_tables(engine)
-        
-        logging.info("TRANSFORMATION COMPLETED SUCCESSFULLY!")
-        logging.info(f"Original records: {len(df)}")
-        logging.info(f"Cleaned records: {len(cleaned_df)}")
-        logging.info(f"Data reduction: {len(df) - len(cleaned_df)} records removed")
-        
-        
-    except Exception as e:
-        logging.error(f"TRANSFORMATION FAILED: {e}")
         raise e
-
-if __name__ == "__main__":
-    main()
